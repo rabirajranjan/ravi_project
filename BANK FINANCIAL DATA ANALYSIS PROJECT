@@ -1,0 +1,343 @@
+CREATE OR REPLACE DATABASE BANK;
+USE BANK;
+
+
+CREATE OR REPLACE TABLE DISTRICT(
+District_Code INT PRIMARY KEY	,
+District_Name VARCHAR(100)	,
+Region VARCHAR(100)	,
+No_of_inhabitants	INT,
+No_of_municipalities_with_inhabitants_less_499 INT,
+No_of_municipalities_with_inhabitants_500_btw_1999	INT,
+No_of_municipalities_with_inhabitants_2000_btw_9999	INT,
+No_of_municipalities_with_inhabitants_less_10000 INT,	
+No_of_cities	INT,
+Ratio_of_urban_inhabitants	FLOAT,
+Average_salary	INT,
+No_of_entrepreneurs_per_1000_inhabitants	INT,
+No_committed_crime_2017	INT,
+No_committed_crime_2018 INT
+) ;
+
+CREATE OR REPLACE TABLE ACCOUNT(
+account_id INT PRIMARY KEY,
+district_id	INT,
+frequency	VARCHAR(40),
+`Date` DATE ,
+Account_type VARCHAR(40),
+Card_Assigned varchar(20),
+FOREIGN KEY (district_id) references DISTRICT(District_Code) 
+);
+
+
+CREATE OR REPLACE TABLE `ORDER`(
+order_id	INT PRIMARY KEY,
+account_id	INT,
+bank_to	VARCHAR(45),
+account_to	INT,
+amount FLOAT,
+FOREIGN KEY (account_id) references ACCOUNT(account_id)
+);
+
+
+
+CREATE OR REPLACE TABLE LOAN(
+loan_id	INT ,
+account_id	INT,
+Date	DATE,
+amount	INT,
+duration	INT,
+payments	INT,
+`status` VARCHAR(35),
+FOREIGN KEY (account_id) references ACCOUNT(account_id)
+);
+
+CREATE OR REPLACE TABLE TRANSACTIONS(
+trans_id INT,	
+account_id	INT,
+date	DATE,
+Type	VARCHAR(30),
+operation	VARCHAR(40),
+amount	INT,
+balance	FLOAT,
+Purpose	VARCHAR(40),
+bank	VARCHAR(45),
+account INT,
+FOREIGN KEY (account_id) references ACCOUNT(account_id));
+
+
+CREATE OR REPLACE TABLE CLIENT(
+client_id	INT PRIMARY KEY,
+Sex	CHAR(10),
+Birth_date	DATE,
+district_id INT,
+FOREIGN KEY (district_id) references DISTRICT(District_Code) 
+);
+
+CREATE OR REPLACE TABLE DISPOSITION(
+disp_id	INT PRIMARY KEY,
+client_id INT,
+account_id	INT,
+`type` CHAR(15),
+FOREIGN KEY (account_id) references ACCOUNT(account_id),
+FOREIGN KEY (client_id) references CLIENT(client_id)
+);
+
+CREATE OR REPLACE TABLE CARD(
+card_id	INT PRIMARY KEY,
+disp_id	INT,
+`type` CHAR(10)	,
+issued DATE,
+FOREIGN KEY (disp_id) references DISPOSITION(disp_id)
+);
+
+------------------------------------------------------------------------------------------------------------------------------------
+                                                    -- AWS INTEGRATION
+
+CREATE OR REPLACE STORAGE INTEGRATION S3_INT
+TYPE= EXTERNAL_STAGE
+STORAGE_PROVIDER=S3
+ENABLED=TRUE
+STORAGE_AWS_ROLE_ARN="arn:aws:iam::380939848760:role/BANK_ROLE"
+STORAGE_ALLOWED_LOCATIONS =('s3://czechoslovakiabanks/');
+
+DESC INTEGRATION S3_INT;
+
+-- CREATING FILE FORMAT.
+
+create OR REPLACE file format CSV_Czechoslovakia
+    type = CSV
+    SKIP_HEADER=1;
+    
+
+CREATE OR REPLACE STAGE Czechoslovakia_SP
+URL ='s3://czechoslovakiabanks/'
+file_format=CSV_Czechoslovakia
+storage_integration =S3_INT;
+
+SHOW STAGES;
+
+LIST @Czechoslovakia_SP;
+
+CREATE OR REPLACE PIPE BANK_SNOWPIPE_DISTRICT AUTO_INGEST = TRUE AS
+COPY INTO "BANK"."PUBLIC"."DISTRICT" --yourdatabase -- your schema ---your table
+FROM '@Czechoslovakia_SP/DISTRICT/' --s3 bucket subfolde4r name
+FILE_FORMAT =CSV_Czechoslovakia;
+
+CREATE OR REPLACE PIPE BANK_SNOWPIPE_ACCOUNT AUTO_INGEST = TRUE AS
+COPY INTO "BANK"."PUBLIC"."ACCOUNT"
+FROM '@Czechoslovakia_SP/ACCOUNT/'
+FILE_FORMAT =CSV_Czechoslovakia;
+
+CREATE OR REPLACE PIPE BANK_SNOWPIPE_TXNS AUTO_INGEST = TRUE AS
+COPY INTO "BANK"."PUBLIC"."TRANSACTIONS"
+FROM '@Czechoslovakia_SP/TRNX/'
+FILE_FORMAT =CSV_Czechoslovakia;
+
+CREATE OR REPLACE PIPE BANK_SNOWPIPE_DISP AUTO_INGEST = TRUE AS
+COPY INTO "BANK"."PUBLIC"."DISPOSITION"
+FROM '@Czechoslovakia_SP/DISP/'
+FILE_FORMAT =CSV_Czechoslovakia;
+
+
+CREATE OR REPLACE PIPE BANK_SNOWPIPE_CARDS AUTO_INGEST = TRUE AS
+COPY INTO "BANK"."PUBLIC"."CARD"
+FROM '@Czechoslovakia_SP/CARDS/'
+FILE_FORMAT =CSV_Czechoslovakia;
+ 
+
+CREATE OR REPLACE PIPE BANK_SNOWPIPE_ORDER AUTO_INGEST = TRUE AS
+COPY INTO "BANK"."PUBLIC"."`ORDER`"
+FROM '@Czechoslovakia_SP/ORDER/'
+FILE_FORMAT =CSV_Czechoslovakia;
+
+CREATE OR REPLACE PIPE BANK_SNOWPIPE_LOAN AUTO_INGEST = TRUE AS
+COPY INTO "BANK"."PUBLIC"."LOAN"
+FROM '@Czechoslovakia_SP/LOAN/'
+FILE_FORMAT =CSV_Czechoslovakia;
+
+CREATE OR REPLACE PIPE BANK_SNOWPIPE_CLIENT AUTO_INGEST = TRUE AS
+COPY INTO "BANK"."PUBLIC"."CLIENT"
+FROM '@Czechoslovakia_SP/CLIENT/'
+FILE_FORMAT = CSV_Czechoslovakia;
+
+
+SHOW PIPES;
+
+alter pipe BANK_SNOWPIPE_DISTRICT refresh;
+alter pipe BANK_SNOWPIPE_CARDS refresh;
+alter pipe BANK_SNOWPIPE_ACCOUNT refresh;
+alter pipe BANK_SNOWPIPE_DISP refresh;
+alter pipe BANK_SNOWPIPE_ORDER refresh;
+alter pipe BANK_SNOWPIPE_LOAN refresh;
+alter pipe BANK_SNOWPIPE_CLIENT refresh;
+alter pipe BANK_SNOWPIPE_TXNS refresh;
+
+
+SELECT count(*) FROM DISTRICT;
+SELECT count(*) FROM ACCOUNT;
+SELECT count(*) FROM TRANSACTIONS;
+SELECT count(*) FROM DISPOSITION;
+SELECT count(*) FROM CARD;
+SELECT count(*) FROM `ORDER`;
+SELECT count(*) FROM LOAN;
+SELECT count(*) FROM CLIENT;
+-----------------------------------------------------------------------------------------------------------------------------------
+SELECT * FROM CLIENT;
+SELECT * FROM TRANSACTIONS;
+alter table client add column age int;
+update client set age=datediff(year,Birth_date,'2022-12-19');
+
+-----------------------------------------------------------------------------------------------------------------------------------
+UPDATE TRANSACTIONS SET Date = DATEADD(YEAR,1, Date) WHERE YEAR(Date)=2021;
+UPDATE TRANSACTIONS SET Date = DATEADD(YEAR,1, Date) WHERE YEAR(Date)=2020;
+UPDATE TRANSACTIONS SET Date = DATEADD(YEAR,1, Date) WHERE YEAR(Date)=2019;
+UPDATE TRANSACTIONS SET Date = DATEADD(YEAR,1, Date) WHERE YEAR(Date)=2018;
+UPDATE TRANSACTIONS SET Date = DATEADD(YEAR,1, Date) WHERE YEAR(Date)=2017;
+UPDATE TRANSACTIONS SET Date = DATEADD(YEAR,1, Date) WHERE YEAR(Date)=2016;
+
+SELECT YEAR(Date),COUNT(*)FROM TRANSACTIONS GROUP BY 1;
+
+-----------------------------------------------------------------------------------------------------------------------------------
+select * from transactions where bank is null and year(date)=2022;
+update transactions
+set bank='sky bank' where bank is null and year(date)=2022;
+
+select * from transactions where bank is null and year(date)=2021;
+update transactions
+set bank='DBS bank' where bank is null and year(date)=2021;
+
+select * from transactions where bank is null and year(date)=2020;
+-- not null
+
+select * from transactions where bank is null and year(date)=2019;
+update transactions
+set bank='Northern bank' where bank is null and year(date)=2019;
+
+select * from transactions where bank is null and year(date)=2018;
+update transactions
+set bank='southern bank' where bank is null and year(date)=2018;
+
+select * from transactions where bank is null and year(date)=2017;
+update transactions
+set bank='ADB bank' where bank is null and year(date)=2017;
+-----------------------------------------------------------------------------------------------------------------------------------
+SELECT DISTINCT YEAR(issued) FROM CARD;
+
+UPDATE CARD SET issued= DATEADD(YEAR,1, issued) WHERE YEAR(issued)=2021;
+UPDATE CARD SET issued= DATEADD(YEAR,1, issued) WHERE YEAR(issued)=2020;
+UPDATE CARD SET issued= DATEADD(YEAR,1, issued) WHERE YEAR(issued)=2019;
+UPDATE CARD SET issued= DATEADD(YEAR,1, issued) WHERE YEAR(issued)=2018;
+UPDATE CARD SET issued= DATEADD(YEAR,1, issued) WHERE YEAR(issued)=2017;
+UPDATE CARD SET issued= DATEADD(YEAR,1, issued) WHERE YEAR(issued)=2016;
+
+-----------------------------------------------------------------------------------------------------------------------------------
+-- finding no of males & females per year
+select * from client;
+select sex,count(*) from client group by sex;
+
+-----------------------------------------------------------------------------------------------------------------------------------
+select * from client;  --5369
+select * from district; --77
+
+
+select C.DISTRICT_ID,D.DISTRICT_NAME,D.AVERAGE_SALARY,
+ROUND(AVG(C.AGE),0) AS AVERAGE_AGE,
+SUM(CASE WHEN SEX='Male' THEN 1 ELSE 0 END) AS MALE_CLIENT,
+SUM(CASE WHEN SEX='Female' THEN 1 ELSE 0 END) AS FEMALE_CLIENT,
+ROUND((MALE_CLIENT/FEMALE_CLIENT)*100,2) AS MALE_FEMALE_RATIO_PER,
+COUNT(*) AS TOTAL_CLIENT
+from CLIENT AS C JOIN DISTRICT AS D ON C.DISTRICT_ID=D.DISTRICT_CODE
+group by 1,2,3
+order by 1;
+
+----------------------------------------------------------------------------------------------------------------------------------
+SELECT * FROM TRANSACTIONS;
+SELECT BANK, YEAR(DATE),SUM(BALANCE) FROM TRANSACTIONS GROUP BY 1,2 ORDER BY 2 ASC;
+
+----------------------------------------------------------------------------------------------------------------------------------
+
+
+----------------------------------------------------------STORE PROCEDURE-------------------------------------------------------------------------
+CREATE OR REPLACE PROCEDURE CREAT_OR_REPLACE_ACC_LATEST()
+RETURNS STRING
+LANGUAGE SQL
+AS
+$$
+  CREATE OR REPLACE TABLE ACC_LATEST_TXNS_WITH_BALANCE 
+AS(
+SELECT LTD.*,TXN.BALANCE
+FROM TRANSACTIONS AS TXN
+INNER JOIN 
+(
+   SELECT ACCOUNT_ID,YEAR(DATE) AS TXN_YEAR,
+   MONTH(DATE) AS TXN_MONTH,
+   MAX(DATE) AS LATEST_TXN_DATE
+   FROM TRANSACTIONS
+   GROUP BY 1,2,3
+   ORDER BY 1,2,3
+
+) AS LTD ON TXN.ACCOUNT_ID = LTD.ACCOUNT_ID AND TXN.DATE = LTD.LATEST_TXN_DATE
+WHERE TXN.TYPE = 'Credit' -- this is the assumptions am having : month end txn data is credit
+ORDER BY TXN.ACCOUNT_ID,LTD.TXN_YEAR,LTD.TXN_MONTH);
+$$;
+
+SHOW PROCEDURES;
+
+
+CREATE OR REPLACE PROCEDURE CREATE_OR_REPLACE_BANKINGKPI()
+RETURNS STRING
+LANGUAGE SQL
+AS
+$$
+  CREATE OR REPLACE TABLE BANKING_KPI AS(
+SELECT  ALWB.TXN_YEAR , ALWB.TXN_MONTH,T.BANK,A.ACCOUNT_TYPE,
+
+COUNT(DISTINCT ALWB.ACCOUNT_ID) AS TOT_ACCOUNT, 
+COUNT(DISTINCT T.TRANS_ID) AS TOT_TXNS,
+COUNT(CASE WHEN T.TYPE = 'Credit' THEN 1 END) AS DEPOSIT_COUNT ,
+COUNT(CASE WHEN T.TYPE = 'Withdrawal' THEN 1 END) AS WITHDRAWAL_COUNT,
+
+SUM(ALWB.BALANCE) AS TOT_BALANCE,
+
+ROUND((DEPOSIT_COUNT / TOT_TXNS) * 100,2)  AS DEPOSIT_PERC ,
+ROUND((WITHDRAWAL_COUNT / TOT_TXNS) * 100,2) AS WITHDRAWAL_PERC ,
+NVL(TOT_BALANCE / TOT_ACCOUNT,0) AS AVG_BALANCE,
+
+ROUND(TOT_TXNS/TOT_ACCOUNT,0) AS TPA
+
+FROM TRANSACTIONS AS T
+INNER JOIN  ACC_LATEST_TXNS_WITH_BALANCE AS ALWB ON T.ACCOUNT_ID = ALWB.ACCOUNT_ID
+LEFT OUTER JOIN  ACCOUNT AS A ON T.ACCOUNT_ID = A.ACCOUNT_ID
+GROUP BY 1,2,3,4
+ORDER BY 1,2,3,4);
+$$;  
+
+CALL CREAT_OR_REPLACE_ACC_LATEST();
+CALL CREATE_OR_REPLACE_BANKINGKPI();  
+  
+  
+
+CREATE OR REPLACE TASK  ACC_LATEST_TXNS_WITH_BALANCE
+WAREHOUSE = COMPUTE_WH
+SCHEDULE =  '1 MINUTE'
+AS CALL CREAT_OR_REPLACE_ACC_LATEST();
+  
+CREATE OR REPLACE TASK  BANKING_KPI
+WAREHOUSE = COMPUTE_WH
+SCHEDULE =  '2 MINUTE'
+AS CALL CREATE_OR_REPLACE_BANKINGKPI();  
+  
+SHOW TASKS;  
+
+ALTER TASK ACC_LATEST_TXNS_WITH_BALANCE  RESUME;
+ALTER TASK ACC_LATEST_TXNS_WITH_BALANCE SUSPEND;  
+ALTER TASK  BANKING_KPI RESUME;
+ALTER TASK BANKING_KPI SUSPEND;    
+SELECT * FROM ACC_LATEST_TXNS_WITH_BALANCE;
+SELECT * FROM BANKING_KPI;
+
+
+
+-----------------------------------------------END----------------------------------------------------------------------------------
+
